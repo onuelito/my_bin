@@ -1,0 +1,65 @@
+#!/bin/sh
+
+# Description:
+#  This shell script purpose is made in order to make it easy and lightweight
+#  to record your screen and stream it to your desired platform. It is still
+#  in development.
+#
+# Dependencies:
+#  - Pulseaudio
+#  - X11
+#  - FFMPEG
+
+
+SOURCES="/tmp/tmp_sources.cstm"
+pactl list sources | grep 'Source #' -A 3 > $SOURCES
+
+INPUTS=$(cat $SOURCES | grep 'alsa_input' | cut -d' ' -f2-)
+OUTPUTS=$(cat $SOURCES | grep 'alsa_output' | cut -d' ' -f2-)
+
+# ERROR CHECKING INPUT OUTPUT EXIST
+[ -z "$INPUTS" ] && echo "Error: No input device found. Make sure to plug one" && exit;
+[ -z "$OUTPUTS" ] && echo "Error: No output device found. Make sure to plug one" && exit;
+
+input=
+output=
+
+# SELECT THE INPUT DEVICE
+while true; do
+    echo -e "Select Input:"
+    cat $SOURCES | grep -A1 'alsa_input' | grep 'Description' | cut -d' ' -f2- | awk '{print " ["NR"]", $0}'
+    read -p "Input device: " index
+    case $index in
+        [1-$(echo $INPUTS | wc -w)] ) input=$(echo $INPUTS | awk -v a=$index '{print $(a)}'); break;;
+    esac
+done
+
+# SELECT THE OUTPUT DEVICE
+while true; do
+    echo -e "Select Output:"
+    cat $SOURCES | grep -A1 'alsa_output' | grep 'Description' | cut -d' ' -f2- | awk '{print " ["NR"]", $0}'
+    read -p "Output device: " index
+    case $index in
+        [1-$(echo $OUTPUTS | wc -w)] ) output=$(echo $OUTPUTS | awk -v a=$index '{print $(a)}'); break;;
+    esac
+done
+
+rm $SOURCES # DELETING THE TEMP SINCE NO LONGER NEEDED
+
+# CALLING FFMPEG
+ffmpeg -v quiet -stats \
+\
+\
+ -f x11grab -video_size 1920x1080 -framerate 24 -i $DISPLAY \
+\
+\
+ -f pulse -ac 2 -ar 48000 -i $output -f pulse -ac 1 -ar 48000 -i $input -filter_complex amix=inputs=2 \
+\
+\
+ -vf scale=1280x720 -c:v h264 -g 24 -b:v 2M -preset ultrafast \
+\
+\
+ -c:a aac -pix_fmt yuv420p -f flv \
+\
+\
+out.mp3
